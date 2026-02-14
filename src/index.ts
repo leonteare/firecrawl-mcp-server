@@ -92,11 +92,33 @@ const server = new FastMCP<SessionData>({
   authenticate: async (request: {
     headers: IncomingHttpHeaders;
   }): Promise<SessionData> => {
+    // Server-level auth: if AUTH_TOKEN is set, validate the bearer token first
+    const authToken = process.env.AUTH_TOKEN;
+    if (authToken) {
+      const headerAuth = request.headers['authorization'];
+      const bearerToken =
+        typeof headerAuth === 'string' &&
+        headerAuth.toLowerCase().startsWith('bearer ')
+          ? headerAuth.slice(7).trim()
+          : undefined;
+
+      if (bearerToken !== authToken) {
+        throw new Error('Unauthorized');
+      }
+    }
+
     if (process.env.CLOUD_SERVICE === 'true') {
-      const apiKey = extractApiKey(request.headers);
+      // When AUTH_TOKEN is used, the Firecrawl API key comes from the server env var
+      const apiKey = authToken
+        ? process.env.FIRECRAWL_API_KEY
+        : extractApiKey(request.headers);
 
       if (!apiKey) {
-        throw new Error('Firecrawl API key is required');
+        throw new Error(
+          authToken
+            ? 'FIRECRAWL_API_KEY env var is required when AUTH_TOKEN is set'
+            : 'Firecrawl API key is required'
+        );
       }
       return { firecrawlApiKey: apiKey };
     } else {
